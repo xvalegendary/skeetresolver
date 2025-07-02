@@ -179,19 +179,20 @@ local function hud()
     R.indicator(r,g,b,a,string.format("$ %s | %s (%s) $",E.get_player_name(focus),S.cls[focus] or "--",sign(yaw(focus))))
   end
   for _,e in ipairs(E.get_players(true)) do
-    if not E.is_enemy(e) then goto cont end
-    local x1,y1,x2,y2,alpha = E.get_bounding_box(e)
-    if not x1 or alpha == 0 then goto cont end
+    local hx,hy,hz = E.hitbox_position(e, 0)
+    if not hx then goto cont end
+    local sx,sy = R.world_to_screen(hx, hy, hz + 10)
+    if not sx then goto cont end
     local cls = S.cls[e]
     if not cls then goto cont end
-    local cx = (x1+x2)/2
     local hue = (G.curtime()*0.4 + e*0.07)%1
     local rr,gg,bb = hsv(hue,1,1)
-    R.text(cx,y1-12,rr,gg,bb,alpha,"b",0,cls)
+    R.text(sx, sy, rr, gg, bb, 255, "cb", cls)
     ::cont::
   end
   -- simple watermark
   watermark()
+
 end
 ------------------------------------------------------------------------
 -- ◇ Register callbacks ---------------------------------------------
