@@ -179,6 +179,7 @@ local function hud()
     R.indicator(r,g,b,a,string.format("$ %s | %s (%s) $",E.get_player_name(focus),S.cls[focus] or "--",sign(yaw(focus))))
   end
   for _,e in ipairs(E.get_players(true)) do
+    if not E.is_enemy(e) then goto cont end
     local hx,hy,hz = E.hitbox_position(e, 0)
     if not hx then goto cont end
     local sx,sy = R.world_to_screen(hx, hy, hz + 10)
@@ -192,10 +193,9 @@ local function hud()
   end
   -- simple watermark
   watermark()
-
 end
 ------------------------------------------------------------------------
 -- ◇ Register callbacks ---------------------------------------------
-C.set_event_callback("run_command", resolver)
+C.set_event_callback("setup_command", resolver)
 C.set_event_callback("paint",       hud)
 C.register_esp_flag("R", 255,140,160, function(ent) return S.cls[ent] and S.cls[ent] ~= "Static" end)
