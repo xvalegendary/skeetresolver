@@ -5,7 +5,7 @@ Enhanced resolver script for the gamesense/skeet API.
 Features
 --------
 - Animated gradient watermark
-- Colourful indicators above enemies
+- Colourful indicators above enemies with gradient text
 - Improved defensive anti-aim detection
 
 ## Recommended Settings
