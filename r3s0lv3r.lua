@@ -181,13 +181,13 @@ local function hud()
   for _,e in ipairs(E.get_players(true)) do
     if not E.is_enemy(e) then goto cont end
     local x1,y1,x2,y2,alpha = E.get_bounding_box(e)
-    if alpha == 0 then goto cont end
+    if not x1 or alpha == 0 then goto cont end
     local cls = S.cls[e]
     if not cls then goto cont end
     local cx = (x1+x2)/2
     local hue = (G.curtime()*0.4 + e*0.07)%1
     local rr,gg,bb = hsv(hue,1,1)
-    R.text(cx,y1-12,rr,gg,bb,alpha,'c',0,cls)
+    R.text(cx,y1-12,rr,gg,bb,alpha,"b",0,cls)
     ::cont::
   end
   -- simple watermark
