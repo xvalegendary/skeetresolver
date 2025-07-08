@@ -8,17 +8,17 @@ local M            = { m=math, b=bit }
 ------------------------------------------------------------------------
 -- ◇ UI ----------------------------------------------------------------
 local cb_on  = UI.new_checkbox("RAGE","Other","Resolver: Enable")
-local cb_mode= UI.new_combobox("RAGE","Other","Resolver Mode","Safe","Balanced","Learning","Brute","Aggressive","Novosibirsk")
+local cb_mode= UI.new_combobox("RAGE","Other","Resolver Mode","Safe","Balanced","Learning")
 UI.new_label("RAGE","Other","— Heuristics —")
 local cb_head= UI.new_checkbox("RAGE","Other","Head trace check")
 local cb_body= UI.new_checkbox("RAGE","Other","Body trace fallback")
 local cb_lag = UI.new_checkbox("RAGE","Other","Lag‑peek filter")
 local cb_step= UI.new_checkbox("RAGE","Other","Adaptive step")
 local sl_step= UI.new_slider("RAGE","Other","Step size",5,30,15,"°")
-local cb_side= UI.new_checkbox("RAGE","Other","Jitter side‑guess")
-local sl_side= UI.new_slider("RAGE","Other","Side guess angle",30,90,58,"°")
-local sl_brute= UI.new_slider("RAGE","Other","Brute spread",10,60,30,"°")
-local sl_aggr = UI.new_slider("RAGE","Other","Aggressive spread",10,40,25,"°")
+local cb_jit = UI.new_checkbox("RAGE","Other","Jitter correction")
+local sl_jit = UI.new_slider("RAGE","Other","Jitter guess angle",30,90,60,"°")
+local sl_def = UI.new_slider("RAGE","Other","Defensive spread",10,40,20,"°")
+local sl_bal = UI.new_slider("RAGE","Other","Balanced spread",10,40,25,"°")
 UI.new_label("RAGE","Other","— Visuals —")
 local cp_col = UI.new_color_picker("RAGE","Other","Indicator colour",80,150,255,255)
 local cb_wm  = UI.new_checkbox("RAGE","Other","Watermark")
@@ -55,6 +55,10 @@ local function def_detect(e)
   local pb  = pitch(e)
   local ld  = lby_delta(e)
   return (low and (pb<-15 or ld>45)) or M.m.abs(roll(e))>10
+end
+local function nlaa_detect(e)
+  if air(e) then return false end
+  return vel_low(e) and lby_delta(e)>75
 end
 local function lagpeek(e)
   if not UI.get(cb_lag) then return false end
@@ -95,6 +99,7 @@ local function classify(e)
   local y=yaw(e); local d=M.m.abs(y-(S.yaw[e] or y)); S.yaw[e]=y
   if air(e)                        then return "Air" end
   if M.m.abs(roll(e))>15          then return "Roll" end
+  if nlaa_detect(e)               then return "NLAA" end
   if d>85                         then return "Flick" end
   if d>=30                        then return "Jitter" end
   if def_detect(e)                then return "Defensive" end
@@ -104,39 +109,60 @@ end
 -- ◇ Offset decision --------------------------------------------------
 local function choose(e,mode)
   if lagpeek(e) or air(e) then return 0 end
-  if UI.get(cb_side) and S.cls[e]=="Jitter" then
-    local ang = UI.get(sl_side)
+  local base = S.last[e] or 0
+  local cls  = S.cls[e]
+
+  if cls == "NLAA" then
+    local opts = {0,90,-90,180}
+    S.idx[e] = (S.idx[e] or 0)%#opts + 1
+    return opts[S.idx[e]]
+  end
+
+  if cls == "Jitter" and UI.get(cb_jit) then
+    local ang = UI.get(sl_jit)
     local g=(S.yaw[e] or 0)>=0 and ang or -ang
     if trace_ok(e,g,0) then return g end
   end
-  local base=S.last[e] or 0
-  if S.cls[e]=="Defensive" then
-    for _,o in ipairs(mesh(base,20,2)) do
+
+  if cls == "Defensive" then
+    for _,o in ipairs(mesh(base,UI.get(sl_def),3)) do
       if trace_ok(e,o,0) then return o end
     end
   end
-  if mode=="Brute" then
-    local spread = UI.get(sl_brute)
-    S.idx[e]=(S.idx[e] or 0)%8+1
-    return mesh(base,spread,4)[S.idx[e]]
+
+  if mode == "Safe" then
+    if UI.get(cb_step) and (S.miss[e] or 0)>1 then
+      local size = UI.get(sl_step)
+      local step = (S.last[e] or 0)>=0 and size or -size
+      return M.m.max(-180,M.m.min(180,(S.last[e] or 0)+step))
+    end
+    return base
   end
-  if mode=="Learning" then return S.last[e] end
-  local set=mesh(base,UI.get(sl_aggr),5)
-  if mode=="Aggressive" or mode=="Novosibirsk" then
+
+  if mode == "Learning" then
+    return S.last[e]
+  end
+
+  if mode == "Balanced" then
+    local set=mesh(base,UI.get(sl_bal),4)
     for _,o in ipairs(set) do if trace_ok(e,o,0) then return o end end
-    if UI.get(cb_body) then for _,o in ipairs(set) do if trace_ok(e,o,3) then return o end end end
+    if UI.get(cb_body) then
+      for _,o in ipairs(set) do if trace_ok(e,o,3) then return o end end
+    end
   end
+
   if UI.get(cb_step) and (S.miss[e] or 0)>0 then
     local size = UI.get(sl_step)
     local step = (S.last[e] or 0)>=0 and size or -size
     return M.m.max(-180,M.m.min(180,(S.last[e] or 0)+step))
   end
+
   return base
 end
 ------------------------------------------------------------------------
 local function apply(e,cls,off)
   local py=pitch(e)
-  P.set(e,"Override pitch",(cls=="Jitter" and "Up") or (py<-25 and "Down") or "Default")
+  P.set(e,"Override pitch",((cls=="Jitter" or cls=="NLAA") and "Up") or (py<-25 and "Down") or "Default")
   P.set(e,"Override roll", cls=="Roll" and "Straighten" or "Off")
   P.set(e,"Force safe point","Force"); P.set(e,"Force body aim","Off"); P.set(e,"Override prefer body aim","Off")
   if off then P.set(e,"Override yaw offset",off) end
@@ -158,7 +184,7 @@ C.set_event_callback("aim_miss",function(ev) if not UI.get(cb_on) then return en
 -- ◇ Watermark --------------------------------------------------------
 local function watermark()
   if not UI.get(cb_wm) then return end
-  local txt=(UI.get(cb_mode)=="Novosibirsk" and "novosibirsk" or "t.me/aesterial")
+  local txt="t.me/aesterial"
   local sw,sh=client.screen_size(); local y=sh-18; local x=(sw/2)-renderer.measure_text("b",txt)/2
   local speed = UI.get(sl_wm_speed)*0.1
   for i=1,#txt do
